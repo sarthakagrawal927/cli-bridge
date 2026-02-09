@@ -13,7 +13,7 @@ const CLI_TOOLS = {
   claude: {
     command: 'claude',
     buildArgs: (model, systemPrompt) => {
-      const args = ['-p', '--output-format', 'stream-json'];
+      const args = ['-p', '--output-format', 'stream-json', '--verbose'];
       if (model) args.push('--model', model);
       if (systemPrompt) args.push('--system-prompt', systemPrompt);
       return args;
@@ -21,17 +21,19 @@ const CLI_TOOLS = {
     inputMode: 'stdin',
     parseStream: (line, emit) => {
       const json = JSON.parse(line);
+      // assistant message contains the text content
       if (json.type === 'assistant' && json.message?.content) {
         for (const block of json.message.content) {
           if (block.type === 'text' && block.text) emit(block.text);
         }
+        return true; // marks that we got the main response
       }
       if (json.type === 'content_block_delta' && json.delta?.text) {
         emit(json.delta.text);
+        return true;
       }
-      if (json.type === 'result' && json.result) {
-        emit(json.result);
-      }
+      // skip 'result' type — it duplicates the assistant text
+      return false;
     },
   },
 
@@ -46,12 +48,14 @@ const CLI_TOOLS = {
     inputMode: 'stdin',
     parseStream: (line, emit) => {
       const json = JSON.parse(line);
-      if (json.type === 'message' && json.content) emit(json.content);
-      if (json.output_text) emit(json.output_text);
-      if (json.type === 'response.output_text.delta' && json.delta) emit(json.delta);
+      if (json.type === 'message' && json.content) { emit(json.content); return true; }
+      if (json.output_text) { emit(json.output_text); return true; }
+      if (json.type === 'response.output_text.delta' && json.delta) { emit(json.delta); return true; }
       if (json.type === 'response.completed' && json.response?.output_text) {
         emit(json.response.output_text);
+        return true;
       }
+      return false;
     },
   },
 
@@ -70,11 +74,12 @@ const CLI_TOOLS = {
         for (const block of json.message.content) {
           if (block.type === 'text' && block.text) emit(block.text);
         }
+        return true;
       }
-      if (json.type === 'content_block_delta' && json.delta?.text) emit(json.delta.text);
-      if (json.type === 'result' && json.result) emit(json.result);
-      if (json.partialText) emit(json.partialText);
-      if (json.text && !json.type) emit(json.text);
+      if (json.type === 'content_block_delta' && json.delta?.text) { emit(json.delta.text); return true; }
+      if (json.partialText) { emit(json.partialText); return true; }
+      if (json.text && !json.type) { emit(json.text); return true; }
+      return false;
     },
   },
 };
@@ -87,13 +92,11 @@ app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 3456;
 
-// Health check — lists available tools
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', providers: Object.keys(CLI_TOOLS) });
 });
 
-// Main chat endpoint
-// Body: { provider, model?, messages: [{role,content}], systemPrompt? }
+// POST /chat — { provider, model?, messages: [{role,content}], systemPrompt? }
 app.post('/chat', (req, res) => {
   const { provider = 'claude', model, messages, systemPrompt } = req.body;
 
@@ -109,18 +112,15 @@ app.post('/chat', (req, res) => {
     });
   }
 
-  // Flatten conversation into a single prompt string
   const prompt = messages
     .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
     .join('\n\n');
 
-  // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Build CLI args
   const args = tool.buildArgs(model, systemPrompt);
   if (tool.inputMode === 'arg') args.push('-p', prompt);
 
@@ -189,8 +189,8 @@ app.post('/chat', (req, res) => {
     res.end();
   });
 
-  // Kill subprocess on client disconnect
-  req.on('close', () => {
+  // Kill subprocess only when the client disconnects (response stream closes)
+  res.on('close', () => {
     if (!proc.killed) proc.kill('SIGTERM');
   });
 });
