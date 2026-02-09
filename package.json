@@ -1,0 +1,17 @@
+{
+  "name": "cli-bridge",
+  "version": "1.0.0",
+  "description": "Lightweight HTTP-to-CLI bridge for AI tools (Claude, Codex, Gemini). Streams responses via SSE.",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5"
+  },
+  "keywords": ["claude", "codex", "gemini", "cli", "bridge", "sse", "streaming"],
+  "license": "MIT"
+}
