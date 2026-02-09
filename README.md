@@ -11,6 +11,8 @@ npm start        # → http://localhost:3456
 
 ## API
 
+Routes are available at both `/chat` and `/api/chat` (same for `/health`).
+
 ### `POST /chat`
 
 Stream a conversation through any supported CLI tool.
@@ -29,6 +31,7 @@ Stream a conversation through any supported CLI tool.
 | Field | Type | Required | Default |
 |-------|------|----------|---------|
 | `provider` | `"claude"` \| `"codex"` \| `"gemini"` | no | `"claude"` |
+| `tool` | string | no | Alias for `provider` |
 | `model` | string | no | CLI default |
 | `messages` | `{role, content}[]` | yes | — |
 | `systemPrompt` | string | no | — |
@@ -47,6 +50,14 @@ data: [DONE]
 { "status": "ok", "providers": ["claude", "codex", "gemini"] }
 ```
 
+## Provider Notes
+
+| Provider | Streaming | System Prompt |
+|----------|-----------|---------------|
+| `claude` | JSON (`stream-json`) | `--system-prompt` flag |
+| `codex` | JSON (`exec --json`) | Embedded in prompt text |
+| `gemini` | Plain text | Embedded in prompt text |
+
 ## Adding a New Provider
 
 Add an entry to `CLI_TOOLS` in `index.mjs`:
@@ -55,19 +66,25 @@ Add an entry to `CLI_TOOLS` in `index.mjs`:
 myTool: {
   command: 'my-cli',
   buildArgs: (model, systemPrompt) => ['--flag', ...],
-  inputMode: 'stdin',  // or 'arg'
-  parseStream: (jsonLine, emit) => {
+  inputMode: 'stdin',           // or 'arg'
+  embedSystemPrompt: false,     // true = prepend system prompt to conversation
+  parseStream: (jsonLine, emit) => {  // null = plain text mode
     const json = JSON.parse(jsonLine);
     if (json.text) emit(json.text);
   },
 },
 ```
 
-## Use in Other Projects
+## Use as Git Submodule
+
+```bash
+git submodule add https://github.com/sarthakagrawal927/cli-bridge.git server
+cd server && npm install
+```
 
 ### Vite proxy (dev)
 ```js
-// vite.config.js
+// vite.config.js — routes work at both /chat and /api/chat
 export default { server: { proxy: { '/api': 'http://localhost:3456' } } }
 ```
 
@@ -78,8 +95,6 @@ const res = await fetch('/api/chat', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ provider: 'claude', messages: [{ role: 'user', content: 'Hello' }] }),
 });
-const reader = res.body.getReader();
-// read SSE chunks...
 ```
 
 ## Environment
