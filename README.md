@@ -1,5 +1,8 @@
 # cli-bridge
 
+![AI Generated](https://ai-percentage-pin.vercel.app/api/ai-percentage?value=85)
+![AI PRs Welcome](https://ai-percentage-pin.vercel.app/api/ai-prs?welcome=yes)
+
 Lightweight HTTP-to-CLI bridge for AI tools. Spawns local CLI processes (Claude Code, Codex, Gemini CLI) and streams responses back via SSE. No API keys needed — uses your already-authenticated CLI tools.
 
 ## Quick Start
